@@ -70,6 +70,14 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
     @CheckForNull
     private String command;
 
+    /**
+     * List variant of #command
+     */
+    private List<String> commands;
+
+    @CheckForNull
+    private String entrypoint;
+
     @CheckForNull
     private String hostname;
 
@@ -132,6 +140,9 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
 
     @CheckForNull
     private String workdir;
+
+    @CheckForNull
+    private String user;
 
     @DataBoundConstructor
     public DockerCreateContainer() {
@@ -310,31 +321,25 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
 
     @Nonnull
     public String[] getDockerCommandArray() {
-        String[] dockerCommandArray = new String[0];
-        final ArrayList<String> commands = new ArrayList<>();
-        if (StringUtils.isNotEmpty(command)) {
-
-            // https://stackoverflow.com/questions/3366281/tokenizing-a-string-but-ignoring-delimiters-within-quotes
-            String regex = "[\"\']([^\"]*)[\"\']|(\\S+)";
-
-            Matcher m = Pattern.compile(regex).matcher(command);
-            while (m.find()) {
-                if (nonNull(m.group(1))) {
-                     commands.add(m.group(1));
-                } else {
-                    commands.add(m.group(2));
-                }
-            }
-
-            dockerCommandArray = commands.toArray(new String[commands.size()]);
-        }
-
-        return dockerCommandArray;
+       return getCommandArray(command);
     }
 
     @DataBoundSetter
     public void setCommand(String command) {
         this.command = command;
+    }
+
+    public String getEntrypoint() {
+        return entrypoint;
+    }
+
+    public String[] getDockerEntrypointArray() {
+        return getCommandArray(entrypoint);
+    }
+
+    @DataBoundSetter
+    public void setEntrypoint(String entrypoint) {
+        this.entrypoint = entrypoint;
     }
 
     // environment
@@ -459,6 +464,16 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
         this.workdir = workdir;
     }
 
+    @CheckForNull
+    public String getUser() {
+        return user;
+    }
+
+    @DataBoundSetter
+    public void setUser(String user) {
+        this.user = user;
+    }
+
     /**
      * Fills user specified values
      *
@@ -476,6 +491,9 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
         if (cmd.length > 0) {
             containerConfig.withCmd(cmd);
         }
+
+        final String[] entrypointArray = getDockerEntrypointArray();
+
 
         containerConfig.withPortBindings(Iterables.toArray(getPortMappings(), PortBinding.class));
 
@@ -557,7 +575,7 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
 
         if (!getDevices().isEmpty()) {
             containerConfig.withDevices(
-                    getDevices().stream().map(Device::parse).collect(Collectors.toList())
+              getDevices().stream().map(Device::parse).collect(Collectors.toList())
             );
         }
 
@@ -571,12 +589,16 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
 
         if (!getLinks().isEmpty()) {
             containerConfig.withLinks(
-                    getLinks().stream().map(Link::parse).collect(Collectors.toList())
+              getLinks().stream().map(Link::parse).collect(Collectors.toList())
             );
         }
 
         if (StringUtils.isNotBlank(getWorkdir())) {
             containerConfig.withWorkingDir(nonNull(resolveVar) ? resolveVar.apply(workdir) : workdir);
+        }
+
+        if (StringUtils.isNotBlank(getUser())) {
+            containerConfig.withUser(getUser());
         }
 
         return containerConfig;
@@ -600,6 +622,29 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
     @Override
     public int hashCode() {
         return HashCodeBuilder.reflectionHashCode(this);
+    }
+
+    private static String[] getCommandArray(String command){
+        String[] dockerCommandArray = new String[0];
+        final ArrayList<String> commands = new ArrayList<>();
+        if (StringUtils.isNotEmpty(command)) {
+
+            // https://stackoverflow.com/questions/3366281/tokenizing-a-string-but-ignoring-delimiters-within-quotes
+            String regex = "[\"\']([^\"]*)[\"\']|(\\S+)";
+
+            Matcher m = Pattern.compile(regex).matcher(command);
+            while (m.find()) {
+                if (nonNull(m.group(1))) {
+                    commands.add(m.group(1));
+                } else {
+                    commands.add(m.group(2));
+                }
+            }
+
+            dockerCommandArray = commands.toArray(new String[commands.size()]);
+        }
+
+        return dockerCommandArray;
     }
 
     @Extension
@@ -697,11 +742,12 @@ public class DockerCreateContainer extends AbstractDescribableImpl<DockerCreateC
             );
         }
 
+        @Nonnull
         @Override
         public String getDisplayName() {
             return "Docker template base";
         }
 
-
     }
+
 }
